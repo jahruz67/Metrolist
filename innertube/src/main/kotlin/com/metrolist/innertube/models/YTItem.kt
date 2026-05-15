@@ -172,6 +172,29 @@ fun <T : YTItem> List<T>.filterVideoSongs(disableVideos: Boolean = false) =
         this
     }
 
+
+fun <T : YTItem> List<T>.filterBlockedArtists(
+    blockedArtistIds: Set<String>,
+    blockGuestAppearances: Boolean = true,
+) = if (blockedArtistIds.isEmpty()) {
+    this
+} else {
+    filterNot { item ->
+        val artists = when (item) {
+            is SongItem -> item.artists
+            else -> emptyList()
+        }
+        if (artists.isEmpty()) return@filterNot false
+        val normalizedIds = artists.mapNotNull { it.id }.toSet()
+        if (blockGuestAppearances) {
+            normalizedIds.any { it in blockedArtistIds }
+        } else {
+            val primaryArtistId = artists.firstOrNull()?.id
+            primaryArtistId != null && primaryArtistId in blockedArtistIds
+        }
+    }
+}
+
 fun <T : YTItem> List<T>.filterYoutubeShorts(enabled: Boolean = false) =
     if (enabled) {
         filterNot { it is PlaylistItem && it.id.startsWith("SS") }

@@ -7,6 +7,7 @@ package com.metrolist.music.ui.menu
 
 import android.content.Intent
 import android.content.res.Configuration
+import androidx.datastore.preferences.core.edit
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -35,13 +36,16 @@ import com.metrolist.music.LocalDatabase
 import com.metrolist.music.LocalListenTogetherManager
 import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.R
+import com.metrolist.music.constants.BlockedArtistsKey
 import com.metrolist.music.db.entities.SpeedDialItem
 import com.metrolist.music.db.entities.ArtistEntity
 import com.metrolist.music.playback.queues.YouTubeQueue
+import com.metrolist.music.utils.dataStore
 import com.metrolist.music.ui.component.Material3MenuGroup
 import com.metrolist.music.ui.component.Material3MenuItemData
 import com.metrolist.music.ui.component.NewAction
 import com.metrolist.music.ui.component.NewActionGrid
+import com.metrolist.music.utils.parseBlockedArtists
 import com.metrolist.music.ui.component.YouTubeListItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -195,6 +199,21 @@ fun YouTubeArtistMenu(
                                     )
                                 }
                             }
+                        }
+                    ),
+                    Material3MenuItemData(
+                        title = { Text(text = stringResource(R.string.block_creator)) },
+                        description = { Text(text = stringResource(R.string.block_creator_desc)) },
+                        icon = {
+                            Icon(painter = painterResource(R.drawable.hide_image), contentDescription = null)
+                        },
+                        onClick = {
+                            coroutineScope.launch(Dispatchers.IO) {
+                                val blocked = parseBlockedArtists(context.dataStore.get(BlockedArtistsKey, "")).toMutableSet()
+                                blocked.add(artist.id)
+                                context.dataStore.edit { it[BlockedArtistsKey] = blocked.joinToString(",") }
+                            }
+                            onDismiss()
                         }
                     )
                 )

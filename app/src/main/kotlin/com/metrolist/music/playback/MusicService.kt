@@ -179,6 +179,7 @@ import com.metrolist.music.playback.queues.EmptyQueue
 import com.metrolist.music.playback.queues.ListQueue
 import com.metrolist.music.playback.queues.Queue
 import com.metrolist.music.playback.queues.YouTubeQueue
+import com.metrolist.music.playback.queues.filterBlockedArtists
 import com.metrolist.music.playback.queues.filterExplicit
 import com.metrolist.music.playback.queues.filterVideoSongs
 import com.metrolist.music.constants.LoudnessLevel
@@ -189,9 +190,11 @@ import com.metrolist.music.utils.NetworkConnectivityObserver
 import com.metrolist.music.utils.ScrobbleManager
 import com.metrolist.music.utils.SyncUtils
 import com.metrolist.music.utils.YTPlayerUtils
+import com.metrolist.music.utils.blockedArtistIds
 import com.metrolist.music.utils.dataStore
 import com.metrolist.music.utils.get
 import com.metrolist.music.utils.reportException
+import com.metrolist.music.utils.shouldBlockGuestAppearances
 import com.metrolist.music.widget.MetrolistWidgetManager
 import com.metrolist.music.widget.MusicWidgetReceiver
 import dagger.hilt.android.AndroidEntryPoint
@@ -1480,6 +1483,7 @@ class MusicService :
                         .getInitialStatus()
                         .filterExplicit(dataStore.get(HideExplicitKey, false))
                         .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
+                        .filterBlockedArtists(blockedArtistIds(), shouldBlockGuestAppearances())
                 }
             if (queue.preloadItem != null && player.playbackState == STATE_IDLE) return@launch
             if (initialStatus.title != null) {
@@ -1552,6 +1556,7 @@ class MusicService :
                             .getInitialStatus()
                             .filterExplicit(dataStore.get(HideExplicitKey, false))
                             .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
+                        .filterBlockedArtists(blockedArtistIds(), shouldBlockGuestAppearances())
                     }
 
                 if (initialStatus.title != null) {
@@ -1598,6 +1603,7 @@ class MusicService :
                                     .map { it.toMediaItem() }
                                     .filterExplicit(cachedHideExplicit)
                                     .filterVideoSongs(cachedHideVideoSongs)
+                                    .filterBlockedArtists(blockedArtistIds(), shouldBlockGuestAppearances())
 
                             if (radioItems.isNotEmpty()) {
                                 val itemCount = player.mediaItemCount
@@ -2317,6 +2323,7 @@ class MusicService :
                             .nextPage()
                             .filterExplicit(cachedHideExplicit)
                             .filterVideoSongs(cachedHideVideoSongs)
+                                    .filterBlockedArtists(blockedArtistIds(), shouldBlockGuestAppearances())
                     }
                 if (player.playbackState != STATE_IDLE && mediaItems.isNotEmpty()) {
                     player.addMediaItems(mediaItems)

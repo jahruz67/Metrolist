@@ -56,6 +56,7 @@ import com.metrolist.music.LocalDatabase
 import com.metrolist.music.LocalPlayerAwareWindowInsets
 import com.metrolist.music.R
 import com.metrolist.music.constants.AppLanguageKey
+import com.metrolist.music.constants.BlockGuestAppearancesKey
 import com.metrolist.music.constants.ContentCountryKey
 import com.metrolist.music.constants.ContentLanguageKey
 import com.metrolist.music.constants.CountryCodeToName
@@ -67,6 +68,7 @@ import com.metrolist.music.constants.EnableLyricsPlus
 import com.metrolist.music.constants.HideExplicitKey
 import com.metrolist.music.constants.HideVideoSongsKey
 import com.metrolist.music.constants.HideYoutubeShortsKey
+import com.metrolist.music.constants.GuestAppearanceHandling
 import com.metrolist.music.constants.LanguageCodeToName
 import com.metrolist.music.constants.LyricsProviderOrderKey
 import com.metrolist.music.constants.ProxyEnabledKey
@@ -111,6 +113,10 @@ fun ContentSettings(
     val (hideExplicit, onHideExplicitChange) = rememberPreference(key = HideExplicitKey, defaultValue = false)
     val (hideVideoSongs, onHideVideoSongsChange) = rememberPreference(key = HideVideoSongsKey, defaultValue = false)
     val (hideYoutubeShorts, onHideYoutubeShortsChange) = rememberPreference(key = HideYoutubeShortsKey, defaultValue = false)
+    val (guestAppearanceHandling, onGuestAppearanceHandlingChange) = rememberEnumPreference(
+        key = BlockGuestAppearancesKey,
+        defaultValue = GuestAppearanceHandling.BLOCK_FEATURES
+    )
     val (showArtistDescription, onShowArtistDescriptionChange) = rememberPreference(key = ShowArtistDescriptionKey, defaultValue = true)
     val (showArtistSubscriberCount, onShowArtistSubscriberCountChange) = rememberPreference(key = ShowArtistSubscriberCountKey, defaultValue = true)
     val (showMonthlyListeners, onShowMonthlyListenersChange) = rememberPreference(key = ShowMonthlyListenersKey, defaultValue = true)
@@ -756,6 +762,30 @@ fun ContentSettings(
                         )
                     },
                     onClick = { onHideYoutubeShortsChange(!hideYoutubeShorts) }
+                ),
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.hide_image),
+                    title = { Text(stringResource(R.string.blocked_creator_features)) },
+                    description = {
+                        Text(
+                            text = stringResource(
+                                if (guestAppearanceHandling == GuestAppearanceHandling.BLOCK_FEATURES) {
+                                    R.string.blocked_creator_features_all
+                                } else {
+                                    R.string.blocked_creator_features_primary
+                                }
+                            )
+                        )
+                    },
+                    onClick = {
+                        onGuestAppearanceHandlingChange(
+                            if (guestAppearanceHandling == GuestAppearanceHandling.BLOCK_FEATURES) {
+                                GuestAppearanceHandling.ALLOW_FEATURES
+                            } else {
+                                GuestAppearanceHandling.BLOCK_FEATURES
+                            }
+                        )
+                    }
                 )
             )
         )

@@ -41,6 +41,17 @@ interface Queue {
             } else {
                 this
             }
+
+        fun filterBlockedArtists(
+            blockedArtistIds: Set<String>,
+            blockGuestAppearances: Boolean = true,
+        ) = if (blockedArtistIds.isEmpty()) {
+            this
+        } else {
+            copy(
+                items = items.filterBlockedArtists(blockedArtistIds, blockGuestAppearances),
+            )
+        }
     }
 }
 
@@ -59,3 +70,20 @@ fun List<MediaItem>.filterVideoSongs(disableVideos: Boolean = false) =
     } else {
         this
     }
+
+fun List<MediaItem>.filterBlockedArtists(
+    blockedArtistIds: Set<String>,
+    blockGuestAppearances: Boolean = true,
+) = if (blockedArtistIds.isEmpty()) {
+    this
+} else {
+    filterNot { item ->
+        val artists = item.metadata?.artists.orEmpty()
+        if (artists.isEmpty()) return@filterNot false
+        if (blockGuestAppearances) {
+            artists.any { artist -> artist.id in blockedArtistIds }
+        } else {
+            artists.firstOrNull()?.id in blockedArtistIds
+        }
+    }
+}

@@ -8,6 +8,7 @@ package com.metrolist.music.ui.menu
 import android.content.Intent
 import android.content.res.Configuration
 import android.widget.Toast
+import androidx.datastore.preferences.core.edit
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -74,6 +75,7 @@ import com.metrolist.music.LocalListenTogetherManager
 import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.LocalSyncUtils
 import com.metrolist.music.R
+import com.metrolist.music.constants.BlockedArtistsKey
 import com.metrolist.music.constants.ListItemHeight
 import com.metrolist.music.constants.ListThumbnailSize
 import com.metrolist.music.db.entities.ArtistEntity
@@ -82,6 +84,7 @@ import com.metrolist.music.db.entities.PlaylistSong
 import com.metrolist.music.db.entities.PodcastEntity
 import com.metrolist.music.db.entities.Song
 import com.metrolist.music.db.entities.SpeedDialItem
+import com.metrolist.music.utils.dataStore
 import com.metrolist.music.extensions.toMediaItem
 import com.metrolist.music.models.toMediaMetadata
 import com.metrolist.music.playback.ExoDownloadService
@@ -93,6 +96,7 @@ import com.metrolist.music.ui.component.Material3MenuGroup
 import com.metrolist.music.ui.component.Material3MenuItemData
 import com.metrolist.music.ui.component.NewAction
 import com.metrolist.music.ui.component.NewActionGrid
+import com.metrolist.music.utils.parseBlockedArtists
 import com.metrolist.music.ui.component.SongListItem
 import com.metrolist.music.ui.component.TextFieldDialog
 import com.metrolist.music.ui.utils.ShowMediaInfo
@@ -1026,6 +1030,28 @@ fun SongMenu(
                                         } else {
                                             navController.navigate("album/${song.song.albumId}")
                                         }
+                                    },
+                                ),
+                            )
+                        }
+                        song.artists.firstOrNull()?.id?.let { primaryArtistId ->
+                            add(
+                                Material3MenuItemData(
+                                    title = { Text(text = stringResource(R.string.block_creator)) },
+                                    description = { Text(text = stringResource(R.string.block_creator_song_desc)) },
+                                    icon = {
+                                        Icon(
+                                            painter = painterResource(R.drawable.hide_image),
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        coroutineScope.launch(Dispatchers.IO) {
+                                            val blocked = parseBlockedArtists(context.dataStore.get(BlockedArtistsKey, "")).toMutableSet()
+                                            blocked.add(primaryArtistId)
+                                            context.dataStore.edit { it[BlockedArtistsKey] = blocked.joinToString(",") }
+                                        }
+                                        onDismiss()
                                     },
                                 ),
                             )
