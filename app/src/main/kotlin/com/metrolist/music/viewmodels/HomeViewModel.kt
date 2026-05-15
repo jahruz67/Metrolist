@@ -239,6 +239,9 @@ class HomeViewModel @Inject constructor(
 
             otherSources.addAll(allYtItems.value)
 
+            val blockedArtistIds = context.blockedArtistIds()
+            val blockGuestAppearances = context.shouldBlockGuestAppearances()
+
             // Probability: 80% User Songs, 20% Other Sources
             val item = if (userSongs.isNotEmpty() && (otherSources.isEmpty() || Random.nextFloat() < 0.8f)) {
                 userSongs.distinctBy { it.id }.filterBlockedArtists(blockedArtistIds, blockGuestAppearances)
