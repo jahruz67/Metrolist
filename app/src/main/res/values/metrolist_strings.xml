@@ -959,5 +959,8 @@
     <string name="loudness_level_balanced">Balanced (-14 dB)</string>
     <string name="loudness_level_quiet">Quiet (-19 dB)</string>
     <string name="block_creator">Block creator</string>
-    <string name="block_creator_desc">Hide this creator from radios, mixes, discovery, and home recommendations</string>
+    <string name="block_creator_song_desc">Exclude this creator from future recommendations</string>
+    <string name="blocked_creator_features">Blocked creator collaborations</string>
+    <string name="blocked_creator_features_all">Block songs where blocked creators are featured</string>
+    <string name="blocked_creator_features_primary">Only block songs where blocked creators are primary artists</string>
 </resources>

@@ -8,6 +8,7 @@ package com.metrolist.music.ui.menu
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.res.Configuration
+import androidx.datastore.preferences.core.edit
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -697,6 +698,28 @@ fun YouTubeSongMenu(
                                         navController.navigate("online_podcast/${album.id}")
                                     } else {
                                         navController.navigate("album/${album.id}")
+                                    }
+                                    onDismiss()
+                                }
+                            )
+                        )
+                    }
+                    artists.firstOrNull()?.id?.let { primaryArtistId ->
+                        add(
+                            Material3MenuItemData(
+                                title = { Text(text = stringResource(R.string.block_creator)) },
+                                description = { Text(text = stringResource(R.string.block_creator_song_desc)) },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.block),
+                                        contentDescription = null,
+                                    )
+                                },
+                                onClick = {
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        val blocked = parseBlockedArtists(context.dataStore.get(BlockedArtistsKey, "")).toMutableSet()
+                                        blocked.add(primaryArtistId)
+                                        context.dataStore.edit { it[BlockedArtistsKey] = blocked.joinToString(",") }
                                     }
                                     onDismiss()
                                 }

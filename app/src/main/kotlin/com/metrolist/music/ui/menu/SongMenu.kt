@@ -8,6 +8,7 @@ package com.metrolist.music.ui.menu
 import android.content.Intent
 import android.content.res.Configuration
 import android.widget.Toast
+import androidx.datastore.preferences.core.edit
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -1030,6 +1031,28 @@ fun SongMenu(
                                         } else {
                                             navController.navigate("album/${song.song.albumId}")
                                         }
+                                    },
+                                ),
+                            )
+                        }
+                        song.artists.firstOrNull()?.id?.let { primaryArtistId ->
+                            add(
+                                Material3MenuItemData(
+                                    title = { Text(text = stringResource(R.string.block_creator)) },
+                                    description = { Text(text = stringResource(R.string.block_creator_song_desc)) },
+                                    icon = {
+                                        Icon(
+                                            painter = painterResource(R.drawable.block),
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        coroutineScope.launch(Dispatchers.IO) {
+                                            val blocked = parseBlockedArtists(context.dataStore.get(BlockedArtistsKey, "")).toMutableSet()
+                                            blocked.add(primaryArtistId)
+                                            context.dataStore.edit { it[BlockedArtistsKey] = blocked.joinToString(",") }
+                                        }
+                                        onDismiss()
                                     },
                                 ),
                             )

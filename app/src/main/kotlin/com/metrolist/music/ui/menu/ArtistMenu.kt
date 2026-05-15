@@ -7,6 +7,7 @@ package com.metrolist.music.ui.menu
 
 import android.content.Intent
 import android.content.res.Configuration
+import androidx.datastore.preferences.core.edit
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -241,7 +242,25 @@ fun ArtistMenu(
                             database.transaction {
                                 update(artist.artist.toggleLike())
                             }
-                        }
+                        },
+                    ),
+                    Material3MenuItemData(
+                        title = { Text(text = stringResource(R.string.block_creator)) },
+                        description = { Text(text = stringResource(R.string.block_creator_desc)) },
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.block),
+                                contentDescription = null,
+                            )
+                        },
+                        onClick = {
+                            coroutineScope.launch(Dispatchers.IO) {
+                                val blocked = parseBlockedArtists(context.dataStore.get(BlockedArtistsKey, "")).toMutableSet()
+                                blocked.add(artist.id)
+                                context.dataStore.edit { it[BlockedArtistsKey] = blocked.joinToString(",") }
+                            }
+                            onDismiss()
+                        },
                     )
                 )
             )
