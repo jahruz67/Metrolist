@@ -21,6 +21,7 @@ import com.metrolist.innertube.models.BrowseEndpoint
 import com.metrolist.innertube.models.YTItem
 import com.metrolist.innertube.models.filterExplicit
 import com.metrolist.innertube.models.filterVideoSongs
+import com.metrolist.innertube.models.filterBlockedArtists
 import com.metrolist.innertube.models.filterYoutubeShorts
 import com.metrolist.innertube.pages.ExplorePage
 import com.metrolist.innertube.pages.HomePage
@@ -238,7 +239,8 @@ class HomeViewModel @Inject constructor(
 
             // Probability: 80% User Songs, 20% Other Sources
             val item = if (userSongs.isNotEmpty() && (otherSources.isEmpty() || Random.nextFloat() < 0.8f)) {
-                userSongs.distinctBy { it.id }.shuffled().firstOrNull()
+                userSongs.distinctBy { it.id }.filterBlockedArtists(blockedArtistIds, blockGuestAppearances)
+                                .shuffled().firstOrNull()
             } else {
                 otherSources.distinctBy { it.id }.shuffled().firstOrNull()
             } ?: userSongs.firstOrNull() ?: otherSources.firstOrNull()
@@ -290,6 +292,8 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun getDailyDiscover() {
         val hideVideoSongs = context.dataStore.get(HideVideoSongsKey, false)
+        val blockedArtistIds = context.blockedArtistIds()
+        val blockGuestAppearances = context.shouldBlockGuestAppearances()
         val likedSongs = database.likedSongsByCreateDateAsc().first()
         if (likedSongs.isEmpty()) return
 
