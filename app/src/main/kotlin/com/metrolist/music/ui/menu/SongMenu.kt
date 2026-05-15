@@ -84,7 +84,7 @@ import com.metrolist.music.db.entities.PlaylistSong
 import com.metrolist.music.db.entities.PodcastEntity
 import com.metrolist.music.db.entities.Song
 import com.metrolist.music.db.entities.SpeedDialItem
-import com.metrolist.music.utils.dataStore
+import com.metrolist.music.extensions.dataStore
 import com.metrolist.music.extensions.toMediaItem
 import com.metrolist.music.models.toMediaMetadata
 import com.metrolist.music.playback.ExoDownloadService
@@ -92,6 +92,7 @@ import com.metrolist.music.playback.queues.YouTubeQueue
 import com.metrolist.music.ui.component.DefaultDialog
 import com.metrolist.music.ui.component.ListDialog
 import com.metrolist.music.ui.component.LocalBottomSheetPageState
+import com.metrolist.music.extensions.dataStore
 import com.metrolist.music.ui.component.Material3MenuGroup
 import com.metrolist.music.ui.component.Material3MenuItemData
 import com.metrolist.music.ui.component.NewAction
@@ -1041,7 +1042,7 @@ fun SongMenu(
                                     description = { Text(text = stringResource(R.string.block_creator_song_desc)) },
                                     icon = {
                                         Icon(
-                                            painter = painterResource(R.drawable.hide_image),
+                                            painter = painterResource(R.drawable.block),
                                             contentDescription = null,
                                         )
                                     },

@@ -764,7 +764,7 @@ fun ContentSettings(
                     onClick = { onHideYoutubeShortsChange(!hideYoutubeShorts) }
                 ),
                 Material3SettingsItem(
-                    icon = painterResource(R.drawable.hide_image),
+                    icon = painterResource(R.drawable.block),
                     title = { Text(stringResource(R.string.blocked_creator_features)) },
                     description = {
                         Text(

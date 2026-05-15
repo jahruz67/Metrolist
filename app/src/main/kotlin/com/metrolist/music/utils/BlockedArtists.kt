@@ -4,7 +4,7 @@ import android.content.Context
 import com.metrolist.music.constants.BlockGuestAppearancesKey
 import com.metrolist.music.constants.BlockedArtistsKey
 import com.metrolist.music.constants.GuestAppearanceHandling
-import com.metrolist.music.utils.dataStore
+import com.metrolist.music.extensions.dataStore
 
 fun parseBlockedArtists(rawValue: String): Set<String> =
     rawValue
