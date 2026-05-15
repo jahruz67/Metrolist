@@ -259,6 +259,14 @@ val WrappedSeenKey = booleanPreferencesKey("wrapped_seen")
 val LastSeenVersionKey = stringPreferencesKey("lastSeenVersion")
 val RandomizeHomeOrderKey = booleanPreferencesKey("randomizeHomeOrder")
 
+val BlockedArtistsKey = stringPreferencesKey("blockedArtists")
+val BlockGuestAppearancesKey = stringPreferencesKey("blockGuestAppearances")
+
+enum class GuestAppearanceHandling {
+    BLOCK_FEATURES,
+    ALLOW_FEATURES,
+}
+
 val ShowLikedPlaylistKey = booleanPreferencesKey("show_liked_playlist")
 val ShowDownloadedPlaylistKey = booleanPreferencesKey("show_downloaded_playlist")
 val ShowTopPlaylistKey = booleanPreferencesKey("show_top_playlist")

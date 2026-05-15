@@ -1480,6 +1480,7 @@ class MusicService :
                         .getInitialStatus()
                         .filterExplicit(dataStore.get(HideExplicitKey, false))
                         .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
+                        .filterBlockedArtists(blockedArtistIds(), shouldBlockGuestAppearances())
                 }
             if (queue.preloadItem != null && player.playbackState == STATE_IDLE) return@launch
             if (initialStatus.title != null) {
@@ -1552,6 +1553,7 @@ class MusicService :
                             .getInitialStatus()
                             .filterExplicit(dataStore.get(HideExplicitKey, false))
                             .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
+                        .filterBlockedArtists(blockedArtistIds(), shouldBlockGuestAppearances())
                     }
 
                 if (initialStatus.title != null) {
@@ -1598,6 +1600,7 @@ class MusicService :
                                     .map { it.toMediaItem() }
                                     .filterExplicit(cachedHideExplicit)
                                     .filterVideoSongs(cachedHideVideoSongs)
+                                    .filterBlockedArtists(blockedArtistIds(), shouldBlockGuestAppearances())
 
                             if (radioItems.isNotEmpty()) {
                                 val itemCount = player.mediaItemCount
@@ -2317,6 +2320,7 @@ class MusicService :
                             .nextPage()
                             .filterExplicit(cachedHideExplicit)
                             .filterVideoSongs(cachedHideVideoSongs)
+                                    .filterBlockedArtists(blockedArtistIds(), shouldBlockGuestAppearances())
                     }
                 if (player.playbackState != STATE_IDLE && mediaItems.isNotEmpty()) {
                     player.addMediaItems(mediaItems)
