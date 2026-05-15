@@ -39,6 +39,7 @@ import com.metrolist.music.constants.BlockedArtistsKey
 import com.metrolist.music.db.entities.SpeedDialItem
 import com.metrolist.music.db.entities.Artist
 import com.metrolist.music.utils.dataStore
+import com.metrolist.music.utils.get
 import com.metrolist.music.extensions.toMediaItem
 import com.metrolist.music.playback.queues.ListQueue
 import com.metrolist.music.ui.component.ArtistListItem
