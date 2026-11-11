@@ -47,6 +47,8 @@ import com.metrolist.music.extensions.toggleRepeatMode
 import com.metrolist.music.models.toMediaMetadata
 import com.metrolist.music.utils.dataStore
 import com.metrolist.music.utils.ArtistNameAliases
+import com.metrolist.music.utils.ArtistBlocking
+import com.metrolist.music.constants.BlockedArtistsKey
 import com.metrolist.music.utils.get
 import com.metrolist.music.utils.getArtistSeparator
 import com.metrolist.music.utils.joinToArtistString
@@ -67,6 +69,7 @@ import com.metrolist.music.constants.AndroidAutoSectionsOrderKey
 import com.metrolist.music.constants.AndroidAutoYouTubePlaylistsKey
 import com.metrolist.music.constants.AutoRadioQueueKey
 import com.metrolist.music.playback.queues.ListQueue
+import com.metrolist.music.playback.queues.Queue
 import com.metrolist.music.playback.queues.YouTubeQueue
 import com.metrolist.music.ui.screens.settings.AndroidAutoSection
 import com.metrolist.music.ui.screens.settings.deserializeSections
@@ -645,6 +648,12 @@ constructor(
         startPositionMs: Long,
     ): ListenableFuture<MediaItemsWithStartPosition> =
         scope.future(Dispatchers.IO) {
+            val blockedArtists = ArtistBlocking.decode(context.dataStore.data.first()[BlockedArtistsKey] ?: "{}")
+            fun playableItems(items: List<MediaItem>, index: Int, position: Long): MediaItemsWithStartPosition {
+                val status = Queue.Status(null, items, index, position).filterBlockedArtists(blockedArtists)
+                return MediaItemsWithStartPosition(status.items, status.mediaItemIndex, status.position)
+            }
+
             val defaultResult = MediaItemsWithStartPosition(emptyList(), startIndex, startPositionMs)
             val voiceQuery = mediaItems.firstOrNull()?.requestMetadata?.searchQuery
 
@@ -658,7 +667,7 @@ constructor(
                 MusicService.SONG -> {
                     val songId = path.getOrNull(1) ?: return@future defaultResult
                     val allSongs = database.songsByCreateDateAsc().first()
-                    MediaItemsWithStartPosition(
+                    playableItems(
                         allSongs.map { it.toMediaItem() },
                         allSongs.indexOfFirst { it.id == songId }.takeIf { it != -1 } ?: 0,
                         startPositionMs
@@ -669,7 +678,7 @@ constructor(
                     val songId = path.getOrNull(2) ?: return@future defaultResult
                     val artistId = path.getOrNull(1) ?: return@future defaultResult
                     val songs = database.artistSongsByCreateDateAsc(artistId).first()
-                    MediaItemsWithStartPosition(
+                    playableItems(
                         songs.map { it.toMediaItem() },
                         songs.indexOfFirst { it.id == songId }.takeIf { it != -1 } ?: 0,
                         startPositionMs
@@ -680,7 +689,7 @@ constructor(
                     val songId = path.getOrNull(2) ?: return@future defaultResult
                     val albumId = path.getOrNull(1) ?: return@future defaultResult
                     val albumWithSongs = database.albumWithSongs(albumId).first() ?: return@future defaultResult
-                    MediaItemsWithStartPosition(
+                    playableItems(
                         albumWithSongs.songs.map { it.toMediaItem() },
                         albumWithSongs.songs.indexOfFirst { it.id == songId }.takeIf { it != -1 } ?: 0,
                         startPositionMs
@@ -715,13 +724,13 @@ constructor(
 
                     // Check if this is a shuffle action
                     if (songId == MusicService.SHUFFLE_ACTION) {
-                        MediaItemsWithStartPosition(
+                        playableItems(
                             songs.shuffled().map { it.toMediaItem() },
                             0,
                             C.TIME_UNSET
                         )
                     } else {
-                        MediaItemsWithStartPosition(
+                        playableItems(
                             songs.map { it.toMediaItem() },
                             songs.indexOfFirst { it.id == songId }.takeIf { it != -1 } ?: 0,
                             startPositionMs
@@ -744,13 +753,13 @@ constructor(
 
                     // Check if this is a shuffle action
                     if (songId == MusicService.SHUFFLE_ACTION) {
-                        MediaItemsWithStartPosition(
+                        playableItems(
                             songs.shuffled(),
                             0,
                             C.TIME_UNSET
                         )
                     } else {
-                        MediaItemsWithStartPosition(
+                        playableItems(
                             songs,
                             songs.indexOfFirst { it.mediaId.endsWith(songId) }.takeIf { it != -1 } ?: 0,
                             C.TIME_UNSET
@@ -773,7 +782,7 @@ constructor(
                         if (exactLocalPlaylist != null) {
                             val playlistSongs = database.playlistSongs(exactLocalPlaylist.playlist.id).first()
                             if (playlistSongs.isNotEmpty()) {
-                                return@future MediaItemsWithStartPosition(
+                                return@future playableItems(
                                     playlistSongs.map { it.song.toMediaItem() },
                                     0,
                                     C.TIME_UNSET
@@ -844,6 +853,7 @@ constructor(
                                     .getInitialStatus()
                                     .filterExplicit(context.dataStore.get(HideExplicitKey, false))
                                     .filterVideoSongs(context.dataStore.get(HideVideoSongsKey, false))
+                                    .filterBlockedArtists(blockedArtists)
                             }
                         }.getOrNull()
 
@@ -851,7 +861,7 @@ constructor(
                             withContext(Dispatchers.Main) {
                                 service.adoptQueue(radioQueue, radioStatus.title, radioStatus.items.size) //Used to make the radio queue load more songs when near the end
                             }
-                            return@future MediaItemsWithStartPosition(
+                            return@future playableItems(
                                 radioStatus.items,
                                 radioStatus.items.indexOfFirst { it.mediaId == selectedSong.id }.coerceAtLeast(0),
                                 C.TIME_UNSET,
@@ -869,7 +879,7 @@ constructor(
                             title = selectedSong.song.title,
                         )
                     }
-                    MediaItemsWithStartPosition(
+                    playableItems(
                         items,
                         0,
                         C.TIME_UNSET

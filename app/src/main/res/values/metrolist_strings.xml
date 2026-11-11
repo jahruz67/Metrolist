@@ -994,4 +994,9 @@
     <string name="stream_source_web_creator_desc">Creator web client.</string>
     <string name="top_result">Top result</string>
     <string name="other">Other</string>
+    <string name="dont_play_artist">Don\'t play this artist</string>
+    <string name="allow_artist">Allow this artist</string>
+    <string name="artist_blocked">Artist blocked</string>
+    <string name="artist_allowed">Artist allowed</string>
+    <string name="artist_block_failed">Couldn\'t update blocked artists. Please try again.</string>
 </resources>

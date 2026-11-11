@@ -112,6 +112,7 @@ import com.metrolist.music.constants.AutoDownloadOnLikeKey
 import com.metrolist.music.constants.AutoLoadMoreKey
 import com.metrolist.music.constants.AutoSkipNextOnErrorKey
 import com.metrolist.music.constants.AutoplayKey
+import com.metrolist.music.constants.BlockedArtistsKey
 import com.metrolist.music.constants.CrossfadeDurationKey
 import com.metrolist.music.constants.CrossfadeEnabledKey
 import com.metrolist.music.constants.CrossfadeGaplessKey
@@ -202,10 +203,12 @@ import com.metrolist.music.playback.queues.ListQueue
 import com.metrolist.music.playback.queues.Queue
 import com.metrolist.music.playback.queues.YouTubeQueue
 import com.metrolist.music.playback.queues.YouTubePlaylistQueue
+import com.metrolist.music.playback.queues.filterBlockedArtists
 import com.metrolist.music.playback.queues.filterExplicit
 import com.metrolist.music.playback.queues.filterVideoSongs
 import com.metrolist.music.constants.LoudnessLevel
 import com.metrolist.music.constants.LoudnessLevelKey
+import com.metrolist.music.utils.ArtistBlocking
 import com.metrolist.music.utils.CoilBitmapLoader
 import com.metrolist.music.utils.NetworkConnectivityObserver
 import com.metrolist.music.utils.ScrobbleManager
@@ -506,6 +509,8 @@ class MusicService :
     @Volatile
     private var cachedHideVideoSongs = false
     @Volatile
+    private var cachedBlockedArtists: Map<String, String> = emptyMap()
+    @Volatile
     private var cachedShufflePlaylistFirst = false
     @Volatile
     private var cachedAutoLoadMore = true
@@ -624,6 +629,7 @@ class MusicService :
         // never calls dataStore.get() (which does runBlocking internally).
         // This consolidates ~15 main-thread-blocking DataStore reads into 1.
         startupPrefs = runBlocking(Dispatchers.IO) { dataStore.data.first() }
+        cachedBlockedArtists = ArtistBlocking.decode(startupPrefs!![BlockedArtistsKey] ?: "{}")
         historyPaused = startupPrefs!![PauseListenHistoryKey] ?: false
         historyDurationMs = ((startupPrefs!![HistoryDuration] ?: 30f) * 1000).toLong()
 
@@ -1180,12 +1186,19 @@ class MusicService :
             dataStore.data.map { it[HideVideoSongsKey] ?: false }.distinctUntilChanged().collect { cachedHideVideoSongs = it }
         }
         scope.launch {
+            dataStore.data.map { it[BlockedArtistsKey] ?: "{}" }.distinctUntilChanged().collect {
+                cachedBlockedArtists = ArtistBlocking.decode(it)
+                removeBlockedArtistTracks()
+            }
+        }
+        scope.launch {
             dataStore.data.map { it[ShufflePlaylistFirstKey] ?: false }.distinctUntilChanged().collect { cachedShufflePlaylistFirst = it }
         }
         scope.launch {
             dataStore.data.map { it[AutoLoadMoreKey] ?: true }.distinctUntilChanged().collect { cachedAutoLoadMore = it }
         }
         if (startupPrefs!![PersistentQueueKey] ?: true) {
+            var restoredQueueItems = emptyList<com.metrolist.music.models.MediaMetadata>()
             val queueFile = filesDir.resolve(PERSISTENT_QUEUE_FILE)
             if (queueFile.exists()) {
                 runCatching {
@@ -1196,6 +1209,7 @@ class MusicService :
                     }
                 }.onSuccess { queue ->
                     runCatching {
+                        restoredQueueItems = queue.items
                         val restoredQueue = queue.toQueue()
                         scope.launch {
                             playerInitialized.first { it }
@@ -1227,7 +1241,7 @@ class MusicService :
                     }
                 }.onSuccess { queue ->
                     runCatching {
-                        automixItems.value = queue.items.map { it.toMediaItem() }
+                        automixItems.value = queue.items.map { it.toMediaItem() }.filterBlockedArtists(cachedBlockedArtists)
                     }.onFailure { error ->
                         Timber.tag(TAG).w(error, "Failed to restore automix queue, clearing data")
                         clearPersistedQueueFiles()
@@ -1254,9 +1268,12 @@ class MusicService :
                         // player.shuffleModeEnabled = playerState.shuffleModeEnabled
                         playerVolume.value = playerState.volume
 
-                        if (playerState.currentMediaItemIndex < player.mediaItemCount) {
-                            player.seekTo(playerState.currentMediaItemIndex, playerState.currentPosition)
+                        val savedId = restoredQueueItems.getOrNull(playerState.currentMediaItemIndex)?.id
+                        val restoredIndex = (0 until player.mediaItemCount).firstOrNull {
+                            player.getMediaItemAt(it).mediaId == savedId
                         }
+                        if (restoredIndex != null) player.seekTo(restoredIndex, playerState.currentPosition)
+
                     }
                 }.onFailure { error ->
                     Timber.tag(TAG).w(error, "Failed to read player state, clearing data")
@@ -1800,6 +1817,9 @@ class MusicService :
             return
         }
 
+        val preloadItem = queue.preloadItem
+        if (ArtistBlocking.isBlocked(preloadItem, cachedBlockedArtists)) return
+
         currentQueue = queue
         queueTitle = null
         val persistShuffleAcrossQueues = dataStore.get(PersistentShuffleAcrossQueuesKey, false)
@@ -1807,27 +1827,46 @@ class MusicService :
             player.shuffleModeEnabled = false
         }
         originalQueueSize = 0
-        if (queue.preloadItem != null) {
-            player.setMediaItem(queue.preloadItem!!.toMediaItem())
+        if (preloadItem != null) {
+            player.setMediaItem(preloadItem.toMediaItem())
             player.prepare()
             player.playWhenReady = playWhenReady
         }
         scope.launch(SilentHandler) {
-            val initialStatus =
+            val unfilteredStatus =
                 withContext(Dispatchers.IO) {
                     queue
                         .getInitialStatus()
                         .filterExplicit(dataStore.get(HideExplicitKey, false))
                         .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
                 }
-            if (queue.preloadItem != null && player.playbackState == STATE_IDLE) return@launch
+            val hasAllowedSuccessor = unfilteredStatus.items.drop(unfilteredStatus.mediaItemIndex.coerceAtLeast(0))
+                .any { !ArtistBlocking.isBlocked(it.metadata, cachedBlockedArtists) }
+            var initialStatus = unfilteredStatus.filterBlockedArtists(cachedBlockedArtists)
+            if (currentQueue !== queue) return@launch
+            if (preloadItem != null && player.playbackState == STATE_IDLE &&
+                player.currentMediaItem?.mediaId == preloadItem.id
+            ) return@launch
+            if (!hasAllowedSuccessor && cachedBlockedArtists.isNotEmpty() && queue.hasNextPage()) {
+                val continuation = nextPlayableQueuePage(queue)
+                if (continuation.isNotEmpty()) {
+                    initialStatus = initialStatus.copy(
+                        items = initialStatus.items + continuation,
+                        mediaItemIndex = initialStatus.items.size,
+                        position = 0L,
+                    )
+                }
+            }
+            if (currentQueue !== queue) return@launch
             if (initialStatus.title != null) {
                 queueTitle = initialStatus.title
             }
             if (initialStatus.items.isEmpty()) return@launch
             // Track original queue size for shuffle playlist first feature
             originalQueueSize = initialStatus.items.size
-            if (queue.preloadItem != null) {
+            if (preloadItem != null && player.currentMediaItem?.mediaId == preloadItem.id &&
+                initialStatus.items[initialStatus.mediaItemIndex].mediaId == preloadItem.id
+            ) {
                 player.addMediaItems(
                     0,
                     initialStatus.items.subList(0, initialStatus.mediaItemIndex),
@@ -1895,7 +1934,7 @@ class MusicService :
                             .getInitialStatus()
                             .filterExplicit(dataStore.get(HideExplicitKey, false))
                             .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
-                    }
+                    }.filterBlockedArtists(cachedBlockedArtists)
 
                 if (initialStatus.title != null) {
                     queueTitle = initialStatus.title
@@ -1939,6 +1978,7 @@ class MusicService :
                                     .map { it.toMediaItem() }
                                     .filterExplicit(cachedHideExplicit)
                                     .filterVideoSongs(cachedHideVideoSongs)
+                                    .filterBlockedArtists(cachedBlockedArtists)
 
                             if (radioItems.isNotEmpty()) {
                                 val itemCount = player.mediaItemCount
@@ -1977,13 +2017,13 @@ class MusicService :
                                     automixItems.value =
                                         secondResult.items.map { song ->
                                             song.toMediaItem()
-                                        }
+                                        }.filterBlockedArtists(cachedBlockedArtists)
                                 }.onFailure {
                                     if (firstResult.items.isNotEmpty()) {
                                         automixItems.value =
                                             firstResult.items.map { song ->
                                                 song.toMediaItem()
-                                            }
+                                            }.filterBlockedArtists(cachedBlockedArtists)
                                     }
                                 }
                         }.onFailure {
@@ -2000,6 +2040,7 @@ class MusicService :
                                             radioResult.items
                                                 .filter { it.id != currentSong.id }
                                                 .map { it.toMediaItem() }
+                                                .filterBlockedArtists(cachedBlockedArtists)
                                         if (filteredItems.isNotEmpty()) {
                                             automixItems.value = filteredItems
                                         }
@@ -2014,6 +2055,7 @@ class MusicService :
                                                         relatedPage.songs
                                                             .filter { it.id != currentSong.id }
                                                             .map { it.toMediaItem() }
+                                                            .filterBlockedArtists(cachedBlockedArtists)
                                                     if (relatedItems.isNotEmpty()) {
                                                         automixItems.value = relatedItems
                                                     }
@@ -2055,9 +2097,11 @@ class MusicService :
     }
 
     fun playNext(items: List<MediaItem>) {
+        val allowedItems = items.filterBlockedArtists(cachedBlockedArtists)
+        if (allowedItems.isEmpty()) return
         // If queue is empty or player is idle, play immediately instead
         if (player.mediaItemCount == 0 || player.playbackState == STATE_IDLE) {
-            player.setMediaItems(items)
+            player.setMediaItems(allowedItems)
             player.prepare()
             if (castConnectionHandler?.isCasting?.value != true) {
                 player.play()
@@ -2066,7 +2110,7 @@ class MusicService :
         }
 
         if (dataStore.get(PreventDuplicateTracksInQueueKey, false)) {
-            val itemIds = items.map { it.mediaId }.toSet()
+            val itemIds = allowedItems.map { it.mediaId }.toSet()
             val indicesToRemove = mutableListOf<Int>()
             val currentIndex = player.currentMediaItemIndex
 
@@ -2086,7 +2130,7 @@ class MusicService :
         val shuffleEnabled = player.shuffleModeEnabled
 
         // Insert items immediately after the current item in the window/index space
-        player.addMediaItems(insertIndex, items)
+        player.addMediaItems(insertIndex, allowedItems)
         player.prepare()
 
         if (shuffleEnabled) {
@@ -2096,8 +2140,8 @@ class MusicService :
                 val size = timeline.windowCount
                 val currentIndex = player.currentMediaItemIndex
 
-                // Newly inserted indices are a contiguous range [insertIndex, insertIndex + items.size)
-                val newIndices = (insertIndex until (insertIndex + items.size)).toSet()
+                // Newly inserted indices are a contiguous range [insertIndex, insertIndex + allowedItems.size)
+                val newIndices = (insertIndex until (insertIndex + allowedItems.size)).toSet()
 
                 // Collect existing shuffle traversal order excluding current index
                 val orderAfter = mutableListOf<Int>()
@@ -2120,7 +2164,7 @@ class MusicService :
                 val existingOrder = (prevList + orderAfter).filter { it != currentIndex && it !in newIndices }
 
                 // Build new shuffle order: current -> newly inserted (in insertion order) -> rest
-                val nextBlock = (insertIndex until (insertIndex + items.size)).toList()
+                val nextBlock = (insertIndex until (insertIndex + allowedItems.size)).toList()
                 val finalOrder = IntArray(size)
                 var pos = 0
                 prevList
@@ -2148,8 +2192,10 @@ class MusicService :
     }
 
     fun addToQueue(items: List<MediaItem>) {
+        val allowedItems = items.filterBlockedArtists(cachedBlockedArtists)
+        if (allowedItems.isEmpty()) return
         if (dataStore.get(PreventDuplicateTracksInQueueKey, false)) {
-            val itemIds = items.map { it.mediaId }.toSet()
+            val itemIds = allowedItems.map { it.mediaId }.toSet()
             val indicesToRemove = mutableListOf<Int>()
             val currentIndex = player.currentMediaItemIndex
 
@@ -2165,7 +2211,7 @@ class MusicService :
             }
         }
 
-        player.addMediaItems(items)
+        player.addMediaItems(allowedItems)
         if (player.shuffleModeEnabled) {
             val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
             applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
@@ -2528,10 +2574,62 @@ class MusicService :
         }
     }
 
+    private fun removeBlockedArtistTracks() {
+        automixItems.value = automixItems.value.filterBlockedArtists(cachedBlockedArtists)
+        if (!playerInitialized.value || cachedBlockedArtists.isEmpty()) return
+
+        fadingPlayer?.takeIf { ArtistBlocking.isBlocked(it.currentMetadata, cachedBlockedArtists) }?.let {
+            crossfadeJob?.cancel()
+            cleanupCrossfade(fadingPlayerSessionId = it.audioSessionId)
+        }
+
+        val currentIndex = player.currentMediaItemIndex
+        val currentIsBlocked = ArtistBlocking.isBlocked(player.currentMetadata, cachedBlockedArtists)
+        // Remove other blocked tracks first so skipping the current track lands on an allowed one.
+        for (index in player.mediaItemCount - 1 downTo 0) {
+            if (index != currentIndex && ArtistBlocking.isBlocked(player.getMediaItemAt(index).metadata, cachedBlockedArtists)) {
+                player.removeMediaItem(index)
+            }
+        }
+        if (currentIsBlocked) {
+            previousMediaItemIndex = C.INDEX_UNSET
+            val wasPlaying = player.playWhenReady
+            val queue = currentQueue
+            val needsContinuation = player.mediaItemCount == 1 && queue.hasNextPage()
+            if (player.mediaItemCount == 1) player.pause()
+            player.removeMediaItem(player.currentMediaItemIndex)
+            if (needsContinuation) {
+                scope.launch(SilentHandler) {
+                    val items = nextPlayableQueuePage(queue)
+                    if (currentQueue === queue && player.mediaItemCount == 0 && items.isNotEmpty()) {
+                        player.setMediaItems(items)
+                        player.prepare()
+                        player.playWhenReady = wasPlaying
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun nextPlayableQueuePage(queue: Queue): List<MediaItem> {
+        while (currentQueue === queue && coroutineContext.isActive && queue.hasNextPage()) {
+            val items = withContext(Dispatchers.IO) {
+                queue.nextPage().filterExplicit(cachedHideExplicit).filterVideoSongs(cachedHideVideoSongs)
+            }.filterBlockedArtists(cachedBlockedArtists)
+            if (currentQueue !== queue) return emptyList()
+            if (items.isNotEmpty()) return items
+        }
+        return emptyList()
+    }
+
     override fun onMediaItemTransition(
         mediaItem: MediaItem?,
         reason: Int,
     ) {
+        if (ArtistBlocking.isBlocked(mediaItem?.metadata, cachedBlockedArtists)) {
+            removeBlockedArtistTracks()
+            return
+        }
         // Only natural completion transitions mark the previous track as fully cached,
         // never a manual skip or seek. Read lastTransitionedMediaId before replacing it.
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO ||
@@ -2602,20 +2700,15 @@ class MusicService :
             }
         }
 
-        if (cachedAutoLoadMore &&
+        if (mediaItem != null && cachedAutoLoadMore &&
             reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT &&
             player.mediaItemCount - player.currentMediaItemIndex <= 5 &&
             currentQueue.hasNextPage() &&
             !(cachedDisableLoadMoreWhenRepeatAll && player.repeatMode == REPEAT_MODE_ALL)
         ) {
+            val queue = currentQueue
             scope.launch(SilentHandler) {
-                val mediaItems =
-                    withContext(Dispatchers.IO) {
-                        currentQueue
-                            .nextPage()
-                            .filterExplicit(cachedHideExplicit)
-                            .filterVideoSongs(cachedHideVideoSongs)
-                    }
+                val mediaItems = nextPlayableQueuePage(queue)
                 if (player.playbackState != STATE_IDLE && mediaItems.isNotEmpty()) {
                     player.addMediaItems(mediaItems)
                     if (player.shuffleModeEnabled) {
@@ -4865,6 +4958,10 @@ class MusicService :
                 player.nextMediaItemIndex
             }
         if (targetIndex == C.INDEX_UNSET) return
+        if (ArtistBlocking.isBlocked(player.getMediaItemAt(targetIndex).metadata, cachedBlockedArtists)) {
+            removeBlockedArtistTracks()
+            return
+        }
 
         secondaryPlayer = createExoPlayer()
         val secPlayer = secondaryPlayer!!

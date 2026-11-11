@@ -116,6 +116,7 @@ import com.metrolist.music.ui.component.shimmer.ListItemPlaceHolder
 import com.metrolist.music.ui.component.shimmer.ShimmerHost
 import com.metrolist.music.ui.component.shimmer.TextPlaceholder
 import com.metrolist.music.ui.menu.AlbumMenu
+import com.metrolist.music.ui.menu.ArtistMenu
 import com.metrolist.music.ui.menu.SongMenu
 import com.metrolist.music.ui.menu.YouTubeAlbumMenu
 import com.metrolist.music.ui.menu.YouTubeArtistMenu
@@ -1026,6 +1027,27 @@ fun ArtistScreen(
             }
         },
         actions = {
+            if (artistPage != null || libraryArtist != null) {
+                IconButton(
+                    onClick = {
+                        menuState.show {
+                            val artist = artistPage?.artist
+                            if (artist != null) {
+                                YouTubeArtistMenu(artist = artist, onDismiss = menuState::dismiss)
+                            } else {
+                                libraryArtist?.let {
+                                    ArtistMenu(it, coroutineScope, menuState::dismiss)
+                                }
+                            }
+                        }
+                    },
+                ) {
+                    Icon(
+                        painterResource(R.drawable.more_vert),
+                        contentDescription = stringResource(R.string.more_options),
+                    )
+                }
+            }
             IconButton(
                 onClick = {
                     viewModel.artistPage?.artist?.shareLink?.let { link ->

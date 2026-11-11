@@ -164,6 +164,7 @@ fun YouTubeArtistMenu(
         item {
             Material3MenuGroup(
                 items = listOf(
+                    artistBlockingMenuItem(artist.id, artist.title, onDismiss),
                     Material3MenuItemData(
                         title = {
                             Text(text = if (libraryArtist?.artist?.bookmarkedAt != null) stringResource(R.string.subscribed) else stringResource(R.string.subscribe))
